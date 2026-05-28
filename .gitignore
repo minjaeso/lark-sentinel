@@ -1,0 +1,28 @@
+# dependencies
+node_modules/
+
+# build output
+.next/
+out/
+dist/
+
+# secrets
+.env
+.env.local
+.env.*.local
+
+# logs
+*.log
+npm-debug.log*
+
+# editor
+.DS_Store
+.vscode/
+.idea/
+
+# OMC / OMX state (orchestrator scratch, not part of the project)
+.omc/
+.omx/
+
+# next.js typegen
+demo-app/next-env.d.ts

@@ -1,0 +1,69 @@
+name: 'Lark Sentinel'
+description: 'Generate diff-targeted Lark workflows on every PR, run them against the preview deploy, post video-rich pass/fail.'
+author: 'somanyjuice'
+branding:
+  icon: 'shield'
+  color: 'purple'
+
+inputs:
+  github-token:
+    description: 'GitHub token with PR write access (use ${{ secrets.GITHUB_TOKEN }})'
+    required: true
+  lark-api-key:
+    description: 'Lark API key. Get one at https://app.getlark.ai/settings/api-keys'
+    required: true
+  anthropic-api-key:
+    description: 'Anthropic API key for generating natural-language workflow descriptions'
+    required: true
+  preview-url:
+    description: 'Base URL of the PR preview deploy (e.g. Vercel preview URL)'
+    required: true
+  max-workflows:
+    description: 'Maximum number of workflows to generate per PR'
+    required: false
+    default: '4'
+  repair-on-flake:
+    description: 'Trigger Lark repair + re-run when a workflow fails on first try'
+    required: false
+    default: 'true'
+  linear-api-key:
+    description: 'Optional Linear API key — files a ticket on real (post-repair) failure'
+    required: false
+    default: ''
+  linear-team-id:
+    description: 'Optional Linear team ID to file tickets under'
+    required: false
+    default: ''
+  secret-context:
+    description: 'Optional Lark secret context name to attach to generated workflows'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    - name: Install Lark CLI
+      shell: bash
+      run: npm install -g @getlark/cli
+    - name: Install Sentinel deps
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm install --no-audit --no-fund
+    - name: Run Sentinel
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        INPUT_GITHUB-TOKEN: ${{ inputs.github-token }}
+        INPUT_LARK-API-KEY: ${{ inputs.lark-api-key }}
+        INPUT_ANTHROPIC-API-KEY: ${{ inputs.anthropic-api-key }}
+        INPUT_PREVIEW-URL: ${{ inputs.preview-url }}
+        INPUT_MAX-WORKFLOWS: ${{ inputs.max-workflows }}
+        INPUT_REPAIR-ON-FLAKE: ${{ inputs.repair-on-flake }}
+        INPUT_LINEAR-API-KEY: ${{ inputs.linear-api-key }}
+        INPUT_LINEAR-TEAM-ID: ${{ inputs.linear-team-id }}
+        INPUT_SECRET-CONTEXT: ${{ inputs.secret-context }}
+      run: node src/index.js

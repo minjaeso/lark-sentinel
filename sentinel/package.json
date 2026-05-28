@@ -1,0 +1,19 @@
+{
+  "name": "lark-sentinel",
+  "version": "0.1.0",
+  "description": "Turn every PR into a self-testing PR. Generates diff-targeted Lark workflows, runs them on the preview deploy, posts video-rich pass/fail.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "smoke": "node src/smoke.js"
+  },
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@actions/github": "^6.0.0",
+    "@anthropic-ai/sdk": "^0.32.1"
+  }
+}
