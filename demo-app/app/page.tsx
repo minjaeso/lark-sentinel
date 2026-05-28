@@ -1,14 +1,12 @@
-import Link from 'next/link';
+import { Suspense } from 'react';
+import Dashboard from './Dashboard';
 
-export default function HomePage() {
+export const dynamic = 'force-dynamic';
+
+export default function Page() {
   return (
-    <section>
-      <h1>Welcome to the Sentinel Demo Storefront</h1>
-      <p>A tiny store used to demonstrate Lark Sentinel.</p>
-      <p>
-        <Link href="/products">Browse products</Link> and try the{' '}
-        <Link href="/checkout">checkout flow</Link>.
-      </p>
-    </section>
+    <Suspense fallback={<p style={{ color: 'var(--muted)' }}>Loading...</p>}>
+      <Dashboard />
+    </Suspense>
   );
 }
