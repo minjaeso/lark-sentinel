@@ -127,9 +127,13 @@ export async function getExecution(workflowId, executionId) {
 }
 
 // Trigger a repair and poll the workflow record until `last_repair_stopped_at`
-// transitions. Throws on timeout. Returns the final repair result_type.
+// transitions. Throws on timeout. Returns the final repair result_type, or
+// {skipped:true, reason} when repair doesn't apply to this workflow's mode.
 export async function triggerRepairAndWait(workflowId, { timeoutSec = 600, pollMs = 5000 } = {}) {
   const before = await getWorkflow(workflowId);
+  if (before.mode && before.mode !== 'deterministic') {
+    return { skipped: true, reason: `repair not applicable for ${before.mode} workflows` };
+  }
   const baselineStoppedAt = before.last_repair_stopped_at || null;
 
   await sh('getlark', ['workflows', 'repairs', 'trigger', workflowId]);
