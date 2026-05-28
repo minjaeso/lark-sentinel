@@ -55,7 +55,9 @@ function StatusPill({ status }: { status: 'active' | 'paused' | string }) {
 export default function Dashboard() {
   const params = useSearchParams();
   const created = decodeCreated(params.get('created'));
-  const agents: Agent[] = created ? [created, ...SEED_AGENTS] : SEED_AGENTS;
+  // Cache the rendered list at SSR-time so the client hydration matches.
+  // The newly-deployed agent will appear on the next /api/agents poll.
+  const agents: Agent[] = SEED_AGENTS;
 
   const totalAum = agents.reduce((s, a) => s + (Number.isFinite(a.aum) ? a.aum : 0), 0);
   const totalPnlToday = agents.reduce((s, a) => s + (Number.isFinite(a.pnlToday) ? a.pnlToday : 0), 0);
