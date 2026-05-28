@@ -64,8 +64,8 @@ export default function AgentForm() {
         setError(json.error || 'Deploy failed');
         return;
       }
-      const encoded = encodeURIComponent(JSON.stringify(json));
-      router.push(`/?created=${encoded}`);
+      // Pass agent id only — dashboard hydrates the rest from the agents endpoint.
+      router.push(`/?created=${json.id}`);
     } catch (err) {
       setStatus('error');
       setError((err as Error).message);

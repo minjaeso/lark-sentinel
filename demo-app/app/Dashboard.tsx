@@ -55,9 +55,7 @@ function StatusPill({ status }: { status: 'active' | 'paused' | string }) {
 export default function Dashboard() {
   const params = useSearchParams();
   const created = decodeCreated(params.get('created'));
-  // Memoize seed agents on the server-rendered fold to avoid hydration mismatch.
-  // The new agent will be picked up by the next /api/agents poll.
-  const agents: Agent[] = SEED_AGENTS;
+  const agents: Agent[] = created ? [created, ...SEED_AGENTS] : SEED_AGENTS;
 
   const totalAum = agents.reduce((s, a) => s + (Number.isFinite(a.aum) ? a.aum : 0), 0);
   const totalPnlToday = agents.reduce((s, a) => s + (Number.isFinite(a.pnlToday) ? a.pnlToday : 0), 0);
