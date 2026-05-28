@@ -61,7 +61,15 @@ export async function archiveWorkflow(workflowId) {
 // Invoke and block until all reach a terminal status. Returns [{workflowId, executionId, status}].
 // NOTE: `getlark workflows invoke --wait` exits non-zero when any workflow fails, and prints
 // human-readable progress to stderr (not JSON). We accept exit code 1 and parse stderr.
-const INVOKE_LINE = /Workflow (wflw_[A-Za-z0-9]+) executed with (\w+)\. Execution ID: (wflw_exec_[A-Za-z0-9]+)/g;
+// Lark prints "executed with failure." OR "executed successfully." — same pattern, different adverb.
+const INVOKE_LINE = /Workflow (wflw_[A-Za-z0-9]+) executed (?:with )?(\w+)\. Execution ID: (wflw_exec_[A-Za-z0-9]+)/g;
+
+function normalizeStatus(raw) {
+  const s = raw.toLowerCase();
+  if (s === 'successfully' || s === 'success') return 'success';
+  if (s === 'failed' || s === 'failure') return 'failure';
+  return s;
+}
 
 export async function invokeWorkflowsAndWait(workflowIds, { timeoutSec = 600 } = {}) {
   const args = [
@@ -94,7 +102,7 @@ export async function invokeWorkflowsAndWait(workflowIds, { timeoutSec = 600 } =
   let m;
   INVOKE_LINE.lastIndex = 0;
   while ((m = INVOKE_LINE.exec(haystack)) !== null) {
-    results.push({ workflowId: m[1], status: m[2].toLowerCase(), executionId: m[3] });
+    results.push({ workflowId: m[1], status: normalizeStatus(m[2]), executionId: m[3] });
   }
   if (results.length === 0) {
     throw new Error(
