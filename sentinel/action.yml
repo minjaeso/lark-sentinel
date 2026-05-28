@@ -7,7 +7,7 @@ branding:
 
 inputs:
   github-token:
-    description: 'GitHub token with PR write access (use ${{ secrets.GITHUB_TOKEN }})'
+    description: 'GitHub token with PR write access. Pass the built-in GITHUB_TOKEN secret.'
     required: true
   lark-api-key:
     description: 'Lark API key. Get one at https://app.getlark.ai/settings/api-keys'
