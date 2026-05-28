@@ -22,7 +22,7 @@ For every PR:
 PR opened → │  1. Read the diff                            │
             │  2. Map files → user-facing surface          │
             │     (routes, API endpoints, components)      │
-            │  3. Ask Claude to write N natural-language   │
+            │  3. Ask OpenAI to write N natural-language   │
             │     Lark workflows that exercise it          │
             │  4. Create workflows in Lark (getlark CLI)   │
             │  5. Invoke them in parallel against the      │
@@ -47,7 +47,7 @@ catalog automatically follows the shape of the code instead of lagging it.
 ## 60-second demo recipe
 
 1. Clone this repo, push it to GitHub, deploy `demo-app/` to Vercel.
-2. Add repo secrets: `GETLARK_API_KEY`, `ANTHROPIC_API_KEY`, optionally
+2. Add repo secrets: `GETLARK_API_KEY`, `OPENAI_API_KEY`, optionally
    `LINEAR_API_KEY`. Add repo vars: `PREVIEW_URL`, optionally `LINEAR_TEAM_ID`.
 3. Open a PR that edits `demo-app/app/checkout/page.tsx`. Set
    `SENTINEL_DEMO_BUG=1` in the preview env (Vercel → project → environment).
@@ -89,7 +89,7 @@ catalog automatically follows the shape of the code instead of lagging it.
 | Where | What | Why |
 |---|---|---|
 | Repo secret | `GETLARK_API_KEY` | Lark API. Get one at app.getlark.ai/settings |
-| Repo secret | `ANTHROPIC_API_KEY` | Claude API for workflow generation |
+| Repo secret | `OPENAI_API_KEY` | Claude API for workflow generation |
 | Repo secret | `LINEAR_API_KEY` *(opt)* | Auto-file tickets on real failures |
 | Repo var | `PREVIEW_URL` | Base URL the workflows run against |
 | Repo var | `LINEAR_TEAM_ID` *(opt)* | Where Linear tickets land |
@@ -109,7 +109,7 @@ npm run smoke
 - **Lark CLI** — `@getlark/cli` for workflow create / invoke / repair / archive.
 - **Lark REST API** — `api.getlark.ai` for execution + presigned artifact URLs.
 - **Lark webhooks** — designed to upgrade to (current path uses `--wait`).
-- **Anthropic Claude (Sonnet 4.6)** — generates natural-language workflow descriptions.
+- **OpenAI (gpt-4o)** — generates natural-language workflow descriptions in JSON mode. Override via `SENTINEL_OPENAI_MODEL` env.
 - **Linear GraphQL API** — `issueCreate` mutation for the ticket loop.
 - **GitHub Actions** — composite action; runs in any repo.
 

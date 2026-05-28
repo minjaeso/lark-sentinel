@@ -16,7 +16,7 @@ import { fileLinearIssue } from './linear.js';
 async function run() {
   const githubToken = core.getInput('github-token', { required: true });
   const larkApiKey = core.getInput('lark-api-key', { required: true });
-  const anthropicApiKey = core.getInput('anthropic-api-key', { required: true });
+  const openaiApiKey = core.getInput('openai-api-key', { required: true });
   const previewUrl = core.getInput('preview-url', { required: true });
   const linearApiKey = core.getInput('linear-api-key');
   const linearTeamId = core.getInput('linear-team-id');
@@ -25,7 +25,7 @@ async function run() {
   const repairOnFlake = (core.getInput('repair-on-flake') || 'true') === 'true';
 
   process.env.GETLARK_API_KEY = larkApiKey;
-  process.env.ANTHROPIC_API_KEY = anthropicApiKey;
+  process.env.OPENAI_API_KEY = openaiApiKey;
 
   const octokit = github.getOctokit(githubToken);
   const ctx = github.context;

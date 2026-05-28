@@ -1,4 +1,8 @@
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
+
+// Default to gpt-4o (broad availability + native JSON mode).
+// Set SENTINEL_OPENAI_MODEL to override (e.g. gpt-5, gpt-4o-mini for cheaper runs).
+const MODEL = process.env.SENTINEL_OPENAI_MODEL || 'gpt-4o';
 
 const SYSTEM = `You generate end-to-end test workflow descriptions for the Lark testing platform.
 Lark workflows are written in plain English and executed by an AI browser agent.
@@ -37,23 +41,20 @@ Generate up to ${maxWorkflows} workflow descriptions that, together, verify the 
 }
 
 export async function generateWorkflowDescriptions(opts) {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  const message = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 2000,
-    system: SYSTEM,
-    messages: [{ role: 'user', content: userPrompt(opts) }],
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const completion = await client.chat.completions.create({
+    model: MODEL,
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: SYSTEM },
+      { role: 'user', content: userPrompt(opts) },
+    ],
   });
 
-  const text = message.content
-    .filter((c) => c.type === 'text')
-    .map((c) => c.text)
-    .join('\n')
-    .trim();
-
+  const text = (completion.choices?.[0]?.message?.content || '').trim();
   let parsed;
   try {
-    parsed = JSON.parse(stripFences(text));
+    parsed = JSON.parse(text);
   } catch (err) {
     throw new Error(`LLM did not return valid JSON. Got: ${text.slice(0, 400)}`);
   }
@@ -67,8 +68,4 @@ export async function generateWorkflowDescriptions(opts) {
       name: w.name.replace(/[^a-z0-9-]+/gi, '-').toLowerCase().replace(/^-+|-+$/g, '').slice(0, 40),
       description: w.description.trim(),
     }));
-}
-
-function stripFences(s) {
-  return s.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
 }

@@ -1,23 +1,12 @@
-// Lark integration. CLI for write (create/invoke/repair/archive), REST for read.
-//
-// Auth: GETLARK_API_KEY env (set in index.js).
-// REST base: https://api.getlark.ai
-// REST header: X-API-Key
+// Lark integration via the getlark CLI. CLI returns JSON by default, so we parse
+// stdout directly. Auth: GETLARK_API_KEY env var (already in ~/.getlark/config.json
+// for local CLI runs; set explicitly by the action at runtime).
 
 import { spawn } from 'node:child_process';
 
-const API_BASE = process.env.GETLARK_API_BASE || 'https://api.getlark.ai';
-
-function apiHeaders() {
-  return {
-    'X-API-Key': process.env.GETLARK_API_KEY,
-    'Content-Type': 'application/json',
-  };
-}
-
-function sh(cmd, args, { input } = {}) {
+function sh(cmd, args) {
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (d) => (stdout += d));
@@ -30,53 +19,19 @@ function sh(cmd, args, { input } = {}) {
       }
       resolve({ stdout, stderr });
     });
-    if (input) {
-      child.stdin.write(input);
-      child.stdin.end();
-    }
   });
 }
 
-// Pull a workflow ID out of either JSON stdout or human stdout.
-function parseWorkflowId(stdout) {
+function parseJson(stdout, what) {
   const trimmed = stdout.trim();
   try {
-    const json = JSON.parse(trimmed);
-    if (json.id) return { id: json.id, name: json.name || '' };
-    if (json.workflow && json.workflow.id) return { id: json.workflow.id, name: json.workflow.name || '' };
-  } catch {}
-  const m = trimmed.match(/\b(wf_[A-Za-z0-9]+)\b/);
-  if (m) return { id: m[1], name: '' };
-  throw new Error(`Could not parse workflow id from CLI output:\n${stdout}`);
-}
-
-// Pull execution ids out of `workflows invoke --wait` output. Tolerates both JSON and human formats.
-function parseInvocations(stdout, workflowIds) {
-  const trimmed = stdout.trim();
-  try {
-    const json = JSON.parse(trimmed);
-    const list = Array.isArray(json) ? json : json.executions || json.invocations || [];
-    if (Array.isArray(list) && list.length > 0) {
-      return list.map((e) => ({
-        workflowId: e.workflow_id || e.workflowId || e.workflow?.id,
-        executionId: e.id || e.execution_id || e.executionId,
-        status: e.status,
-      }));
-    }
-  } catch {}
-  // Human fallback: pair workflow IDs with execution IDs by appearance order.
-  const execIds = [...trimmed.matchAll(/\b(exec_[A-Za-z0-9]+)\b/g)].map((m) => m[1]);
-  const wfIds = workflowIds.length === execIds.length
-    ? workflowIds
-    : [...trimmed.matchAll(/\b(wf_[A-Za-z0-9]+)\b/g)].map((m) => m[1]);
-  if (execIds.length === 0) {
-    throw new Error(`Could not parse executions from CLI output:\n${stdout}`);
+    return JSON.parse(trimmed);
+  } catch (err) {
+    // Fallback: scan for known ID prefixes so we still get something useful.
+    const m = trimmed.match(/\b(wflw_[A-Za-z0-9]+)\b/);
+    if (m) return { id: m[1], _raw: trimmed };
+    throw new Error(`Could not parse JSON for ${what}. Raw:\n${trimmed.slice(0, 500)}`);
   }
-  return execIds.map((executionId, i) => ({
-    workflowId: wfIds[i] || workflowIds[i] || workflowIds[0],
-    executionId,
-    status: 'unknown',
-  }));
 }
 
 export async function createWorkflow({ name, description, mode = 'ai_driven', secretContext = '' }) {
@@ -90,10 +45,20 @@ export async function createWorkflow({ name, description, mode = 'ai_driven', se
     args.push('--secret-contexts', secretContext);
   }
   const { stdout } = await sh('getlark', args);
-  const { id, name: serverName } = parseWorkflowId(stdout);
-  return { id, name: serverName || name };
+  const json = parseJson(stdout, 'workflows create');
+  return { id: json.id, name: json.name || name };
 }
 
+export async function getWorkflow(workflowId) {
+  const { stdout } = await sh('getlark', ['workflows', 'get', workflowId]);
+  return parseJson(stdout, 'workflows get');
+}
+
+export async function archiveWorkflow(workflowId) {
+  await sh('getlark', ['workflows', 'archive', workflowId]);
+}
+
+// Invoke and block until all reach a terminal status. Returns [{workflowId, executionId, status}].
 export async function invokeWorkflowsAndWait(workflowIds, { timeoutSec = 600 } = {}) {
   const args = [
     'workflows', 'invoke',
@@ -102,27 +67,34 @@ export async function invokeWorkflowsAndWait(workflowIds, { timeoutSec = 600 } =
     '--timeout', String(timeoutSec),
   ];
   const { stdout } = await sh('getlark', args);
-  return parseInvocations(stdout, workflowIds);
+  const json = parseJson(stdout, 'workflows invoke');
+  const list = Array.isArray(json)
+    ? json
+    : json.executions || json.invocations || json.results || [];
+  if (!Array.isArray(list) || list.length === 0) {
+    throw new Error(`workflows invoke returned no executions. Raw:\n${stdout.slice(0, 500)}`);
+  }
+  return list.map((e) => ({
+    workflowId: e.workflow_id || e.workflowId || e.workflow?.id,
+    executionId: e.id || e.execution_id || e.executionId,
+    status: e.status || e.result_type,
+  }));
 }
 
 export async function getExecution(workflowId, executionId) {
-  const res = await fetch(`${API_BASE}/workflows/${workflowId}/executions/${executionId}`, {
-    headers: apiHeaders(),
-  });
-  if (!res.ok) {
-    throw new Error(`GET execution ${executionId} failed: ${res.status} ${await res.text()}`);
-  }
-  const body = await res.json();
-  // Normalize: artifacts may live at body.artifacts or body.execution.artifacts.
-  const exec = body.execution || body;
+  const { stdout } = await sh('getlark', [
+    'workflows', 'executions', 'get', workflowId, executionId,
+  ]);
+  const exec = parseJson(stdout, 'executions get');
+  const root = exec.execution || exec;
   return {
-    id: exec.id || executionId,
-    workflowId: exec.workflow_id || workflowId,
-    status: exec.status,
-    summary: exec.summary || exec.result_summary || '',
-    startedAt: exec.started_at || exec.startedAt,
-    completedAt: exec.completed_at || exec.completedAt,
-    artifacts: (exec.artifacts || []).map((a) => ({
+    id: root.id || executionId,
+    workflowId: root.workflow_id || workflowId,
+    status: root.status || root.result_type,
+    summary: root.summary || root.result_summary || '',
+    startedAt: root.started_at,
+    completedAt: root.completed_at || root.stopped_at,
+    artifacts: (root.artifacts || []).map((a) => ({
       type: a.artifact_type || a.type,
       filename: a.filename,
       url: a.presigned_url || a.url,
@@ -131,16 +103,21 @@ export async function getExecution(workflowId, executionId) {
   };
 }
 
-export async function triggerRepairAndWait(workflowId, { timeoutSec = 600 } = {}) {
-  const args = [
-    'workflows', 'repairs', 'trigger',
-    workflowId,
-    '--wait',
-    '--timeout', String(timeoutSec),
-  ];
-  await sh('getlark', args);
-}
+// Trigger a repair and poll the workflow record until `last_repair_stopped_at`
+// transitions. Throws on timeout. Returns the final repair result_type.
+export async function triggerRepairAndWait(workflowId, { timeoutSec = 600, pollMs = 5000 } = {}) {
+  const before = await getWorkflow(workflowId);
+  const baselineStoppedAt = before.last_repair_stopped_at || null;
 
-export async function archiveWorkflow(workflowId) {
-  await sh('getlark', ['workflows', 'archive', workflowId]);
+  await sh('getlark', ['workflows', 'repairs', 'trigger', workflowId]);
+
+  const deadline = Date.now() + timeoutSec * 1000;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, pollMs));
+    const wf = await getWorkflow(workflowId);
+    if (wf.last_repair_stopped_at && wf.last_repair_stopped_at !== baselineStoppedAt) {
+      return wf.last_repair_result_type;
+    }
+  }
+  throw new Error(`Repair did not complete within ${timeoutSec}s for ${workflowId}`);
 }

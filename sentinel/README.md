@@ -28,7 +28,7 @@ A GitHub Action that turns every PR into a self-testing PR.
   with:
     github-token: ${{ secrets.GITHUB_TOKEN }}
     lark-api-key: ${{ secrets.GETLARK_API_KEY }}
-    anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+    openai-api-key: ${{ secrets.OPENAI_API_KEY }}
     preview-url: ${{ steps.resolve-preview.outputs.url }}
     # optional
     linear-api-key: ${{ secrets.LINEAR_API_KEY }}
@@ -43,7 +43,7 @@ A GitHub Action that turns every PR into a self-testing PR.
 |---|---|---|---|
 | `github-token` | yes | — | needs `pull-requests: write` |
 | `lark-api-key` | yes | — | from app.getlark.ai |
-| `anthropic-api-key` | yes | — | used to generate workflow descriptions |
+| `openai-api-key` | yes | — | used to generate workflow descriptions (defaults to gpt-4o) |
 | `preview-url` | yes | — | base URL of the PR preview deploy |
 | `max-workflows` | no | `4` | upper bound on generated workflows |
 | `repair-on-flake` | no | `true` | trigger Lark repair + re-run on first failure |
@@ -58,7 +58,7 @@ src/
 ├── index.js     — entrypoint; orchestrates the 6 phases
 ├── diff.js      — PR file list via @actions/github
 ├── surface.js   — file path → route / api / component
-├── generate.js  — Claude → natural-language workflow descriptions
+├── generate.js  — OpenAI (gpt-4o) → natural-language workflow descriptions
 ├── lark.js      — getlark CLI for writes, REST API for reads
 ├── comment.js   — single upsertable PR comment with artifacts
 ├── linear.js    — issueCreate GraphQL mutation

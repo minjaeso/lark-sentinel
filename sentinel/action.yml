@@ -12,8 +12,8 @@ inputs:
   lark-api-key:
     description: 'Lark API key. Get one at https://app.getlark.ai/settings/api-keys'
     required: true
-  anthropic-api-key:
-    description: 'Anthropic API key for generating natural-language workflow descriptions'
+  openai-api-key:
+    description: 'OpenAI API key for generating natural-language workflow descriptions'
     required: true
   preview-url:
     description: 'Base URL of the PR preview deploy (e.g. Vercel preview URL)'
@@ -59,7 +59,7 @@ runs:
       env:
         INPUT_GITHUB-TOKEN: ${{ inputs.github-token }}
         INPUT_LARK-API-KEY: ${{ inputs.lark-api-key }}
-        INPUT_ANTHROPIC-API-KEY: ${{ inputs.anthropic-api-key }}
+        INPUT_OPENAI-API-KEY: ${{ inputs.openai-api-key }}
         INPUT_PREVIEW-URL: ${{ inputs.preview-url }}
         INPUT_MAX-WORKFLOWS: ${{ inputs.max-workflows }}
         INPUT_REPAIR-ON-FLAKE: ${{ inputs.repair-on-flake }}
