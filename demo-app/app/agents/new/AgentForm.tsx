@@ -64,7 +64,10 @@ export default function AgentForm() {
         setError(json.error || 'Deploy failed');
         return;
       }
-      const encoded = encodeURIComponent(JSON.stringify(json));
+      // The dashboard expects display schema (label / capital_usd) per the
+      // new /api/v2 contract — pre-map here while the server upgrade lands.
+      const display = { ...json, name: json.label, aum: json.capital_usd };
+      const encoded = encodeURIComponent(JSON.stringify(display));
       router.push(`/?created=${encoded}`);
     } catch (err) {
       setStatus('error');
