@@ -5,6 +5,8 @@ on:
     types: [opened, synchronize, reopened]
     paths:
       - 'demo-app/**'
+      - 'sentinel/**'
+      - '.github/workflows/sentinel.yml'
 
 permissions:
   contents: read
@@ -14,21 +16,54 @@ jobs:
   sentinel:
     name: Generate diff-targeted Lark workflows
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
     steps:
       - uses: actions/checkout@v4
 
-      # In a real repo you'd resolve the actual preview URL from your deploy provider here.
-      # For Vercel: use the official `vercel/preview-url-action` or read deployments API.
-      # For this hackathon demo we accept it as a repo variable.
-      - name: Resolve preview URL
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Pull Vercel env (preview)
+        working-directory: demo-app
+        run: vercel pull --yes --environment=preview --token=$VERCEL_TOKEN
+
+      - name: Build demo-app
+        working-directory: demo-app
+        run: vercel build --token=$VERCEL_TOKEN
+
+      - name: Deploy preview and capture URL
         id: preview
+        working-directory: demo-app
         run: |
-          if [ -n "${{ vars.PREVIEW_URL }}" ]; then
-            echo "url=${{ vars.PREVIEW_URL }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "url=https://sentinel-demo.example.com" >> "$GITHUB_OUTPUT"
+          set -o pipefail
+          url=$(vercel deploy --prebuilt --token=$VERCEL_TOKEN | tee /tmp/v.log | tail -n 1 | tr -d '[:space:]')
+          if [ -z "$url" ]; then
+            echo "::error::Vercel deploy did not return a URL"
+            tail -20 /tmp/v.log
+            exit 1
           fi
+          echo "Preview URL: $url"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for preview to be reachable
+        run: |
+          url='${{ steps.preview.outputs.url }}'
+          for i in $(seq 1 30); do
+            code=$(curl -sI -o /dev/null -w "%{http_code}" "$url" || echo "000")
+            echo "attempt $i  $code  $url"
+            if [ "$code" = "200" ]; then exit 0; fi
+            sleep 4
+          done
+          echo "::error::Preview never became reachable"
+          exit 1
 
       - name: Run Lark Sentinel
         uses: ./sentinel
