@@ -6,6 +6,9 @@ const APP_ROUTER_PAGE = /^(?:.*\/)?app\/(.+)\/page\.(?:tsx|jsx|ts|js)$/;
 const APP_ROUTER_LAYOUT = /^(?:.*\/)?app\/(.+)\/layout\.(?:tsx|jsx|ts|js)$/;
 const APP_ROUTER_ROUTE = /^(?:.*\/)?app\/(.+)\/route\.(?:ts|js)$/;
 const APP_ROOT_PAGE = /^(?:.*\/)?app\/page\.(?:tsx|jsx|ts|js)$/;
+// Any other tsx/ts/jsx/js file inside app/<segments>/ is a child of the route at that path
+// (helper components, hooks, etc. that the page imports).
+const APP_ROUTER_CHILD = /^(?:.*\/)?app\/(.+)\/[^/]+\.(?:tsx|jsx|ts|js)$/;
 const PAGES_ROUTER = /^(?:.*\/)?pages\/(?!api\/)(.+)\.(?:tsx|jsx|ts|js)$/;
 const PAGES_API = /^(?:.*\/)?pages\/api\/(.+)\.(?:ts|js)$/;
 const COMPONENT = /^(?:.*\/)?components\/(.+)\.(?:tsx|jsx)$/;
@@ -72,6 +75,23 @@ export function mapToSurface(files) {
       if (!seen.has(key)) {
         seen.add(key);
         items.push({ kind: 'api', label: route, source: name });
+      }
+      continue;
+    }
+
+    // Child of an app-router route (e.g. app/checkout/CheckoutForm.tsx)
+    m = name.match(APP_ROUTER_CHILD);
+    if (m) {
+      const route = segmentsToRoute(m[1]);
+      const key = `route:${route}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        items.push({
+          kind: 'route',
+          label: route,
+          source: name,
+          hint: `helper file under the route; test the route end-to-end`,
+        });
       }
       continue;
     }

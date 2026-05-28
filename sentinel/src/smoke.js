@@ -27,6 +27,15 @@ console.log('1. surface mapper — Next.js app router');
   assert.ok(!labels.includes('route:/old'), 'removed pages should be excluded');
 }
 
+console.log('1b. surface mapper — app router child file (helper component)');
+{
+  const files = [{ filename: 'app/checkout/CheckoutForm.tsx', status: 'modified' }];
+  const out = mapToSurface(files);
+  const labels = out.map((o) => `${o.kind}:${o.label}`);
+  console.log('   ->', labels.join(', '));
+  assert.ok(labels.includes('route:/checkout'), 'expected /checkout from app/checkout/CheckoutForm.tsx');
+}
+
 console.log('2. surface mapper — Next.js pages router');
 {
   const files = [
