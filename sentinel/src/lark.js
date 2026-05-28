@@ -61,7 +61,7 @@ export async function archiveWorkflow(workflowId) {
 // Invoke and block until all reach a terminal status. Returns [{workflowId, executionId, status}].
 // NOTE: `getlark workflows invoke --wait` exits non-zero when any workflow fails, and prints
 // human-readable progress to stderr (not JSON). We accept exit code 1 and parse stderr.
-const INVOKE_LINE = /Workflow (wflw_\S+) executed with (\w+)\. Execution ID: (wflw_exec_\S+)/g;
+const INVOKE_LINE = /Workflow (wflw_[A-Za-z0-9]+) executed with (\w+)\. Execution ID: (wflw_exec_[A-Za-z0-9]+)/g;
 
 export async function invokeWorkflowsAndWait(workflowIds, { timeoutSec = 600 } = {}) {
   const args = [
