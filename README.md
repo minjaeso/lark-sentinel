@@ -9,15 +9,23 @@
 
 ## Live demo
 
-Both demo paths are live in this repo:
+The demo system-under-test is **Quant Console** — a Binance-styled AI trading
+agent control plane (dashboard with KPIs + agents table, a deploy-an-agent
+form, and a POST endpoint). Two PRs show the full pass/fail story:
 
 | Path | PR | What it shows |
 |---|---|---|
-| 🟢 **Green** | [#1 — add product to list](https://github.com/minjaeso/lark-sentinel/pull/1) | Sentinel runs against the PR's own Vercel preview, generates a `/products` test, passes. Video of the rendered storefront. |
-| 🔴 **Red** | [#2 — drop email from POST](https://github.com/minjaeso/lark-sentinel/pull/2) | Same flow, but the diff silently breaks `/api/checkout`. Sentinel catches the regression and posts the broken-submit video. |
+| 🟢 **Green** | [#3 — rebuild as Quant Console](https://github.com/minjaeso/lark-sentinel/pull/3) | The new dashboard ships clean. Sentinel reads the diff, deploys the PR to a Vercel preview, generates 2 regression workflows, and reports `all 2 passing` — including the full deploy-an-agent end-to-end flow. |
+| 🔴 **Red** | [#4 — pre-map agent response into dashboard schema](https://github.com/minjaeso/lark-sentinel/pull/4) | A one-line "schema refactor" silently drops the agent's name on the redirect. Sentinel walks the deploy flow, scrolls the dashboard, **sees the literal word "undefined" where the new agent's name should be**, and posts a screenshot named `dashboard-showing-undefined.png` + video. |
 
 Click into either PR → scroll to the Sentinel comment → click `▶ video` to
-see the Lark agent's recording.
+watch Lark's recording, or `🖼 screenshot` to see what its agent saw.
+
+> **Note on artifact URLs.** Lark serves videos/screenshots via presigned S3
+> URLs that expire ~1 hour after they're fetched. The PR comments are
+> refreshed at submission time; if a link returns
+> `AccessDenied · Request has expired`, re-run the action (or ping me) and
+> a fresh comment will go up.
 
 ## The problem
 
@@ -32,15 +40,20 @@ ship without anyone verifying the user-facing surface actually still works.
             ┌──────────────────────────────────────────────────────────┐
 PR opened → │  1. Read the diff (via GitHub API)                       │
             │  2. Map files → user-facing surface                      │
-            │       (Next.js app router + pages router + children)     │
-            │  3. Deploy this PR to a fresh Vercel preview (CLI)       │
-            │  4. Ask OpenAI to write N regression workflows that      │
+            │       (Next.js app router pages, layouts, route          │
+            │        handlers, route-child components, root-child      │
+            │        helpers, pages router)                            │
+            │  3. Deploy this PR to a fresh Vercel preview             │
+            │       (vercel pull → build → deploy --prebuilt)          │
+            │  4. Ask OpenAI gpt-5 for N regression workflows that     │
             │       walk the touched user flow end-to-end              │
+            │       (grounded in actual diff patches, NOT in claims    │
+            │        the PR author makes in the description)           │
             │  5. Create + invoke the workflows in Lark (getlark CLI)  │
             │  6. Lark's AI agent drives a real browser through each   │
             │  7. On flake (deterministic mode) → Lark repair + re-run │
-            │  8. Post a single upsertable PR comment with video,      │
-            │       screenshot, and repro-script links                 │
+            │  8. Post a single upsertable PR comment with             │
+            │       per-step checklist + video / screenshot / repro    │
             │  9. On real failure → file a Linear ticket               │
             │ 10. Archive ephemeral workflows so Lark stays tidy       │
             └──────────────────────────────────────────────────────────┘
@@ -58,7 +71,41 @@ catalog automatically follows the shape of the code instead of lagging it.
 The prompt is explicitly framed as **regression detection, not diff
 verification**: the PR author may have introduced a bug they didn't notice,
 so the generated tests assert *user-visible outcomes* ("the success message
-appears") rather than implementation details that just mirror the diff.
+appears", "the new agent shows up in the list") rather than implementation
+details that just mirror the diff. PR #4's bug — a misleading "schema refactor"
+comment that hides a missing field — passed the LLM's "is this what the
+author claims they did?" interpretation but **failed Sentinel's user-flow
+assertion** because the user-visible name was `undefined`. That's the whole
+product insight.
+
+## What a Sentinel PR comment looks like
+
+```
+## Lark Sentinel
+1 failing, 0 passing of 1 generated workflow(s).
+
+|   | Workflow                | Artifacts                  |
+|:-:|-------------------------|----------------------------|
+| ❌ | deploy-agent-dashboard  | ▶ video · 🖼 screenshot     |
+
+### Findings
+❌ deploy-agent-dashboard — wflw_us14mD2op7vPOqrjJp63j5YW
+
+Lark's agent ran these steps:
+- ✅ Navigate to /agents/new
+- ✅ Fill agent name with "Alpha Test Bot"
+- ✅ Verify initial capital is pre-filled with $100,000
+- ✅ Click Deploy Agent button to submit form
+- ✅ Verify redirect to homepage with ?created= query parameter
+- ❌ Verify "Alpha Test Bot" text is visible on dashboard
+
+> The agent deployment workflow partially works but has a critical bug.
+> Form submission at /agents/new succeeds, shows "Agent deployed
+> successfully" toast, and redirects to homepage with ?created=
+> query parameter. However, the newly created agent displays
+> "undefined" instead of "Alpha Test Bot" in the dashboard table.
+> The agent name is not being properly saved or rendered.
+```
 
 ## 60-second demo recipe
 
@@ -78,29 +125,42 @@ appears") rather than implementation details that just mirror the diff.
 
 ```
 .
-├── sentinel/                      The reusable GitHub Action
-│   ├── action.yml                 Composite action manifest
-│   ├── src/                       JS modules (Node 20, ESM)
-│   │   ├── index.js               10-phase orchestrator
-│   │   ├── diff.js                PR file list (@actions/github)
-│   │   ├── surface.js             file → route/api/component/route-child
-│   │   ├── generate.js            OpenAI → regression workflow descriptions
-│   │   ├── lark.js                getlark CLI for create/invoke/repair/archive
-│   │   ├── comment.js             single upsertable PR comment
-│   │   ├── linear.js              issueCreate GraphQL on real failures
-│   │   └── smoke.js               offline smoke test
+├── sentinel/                            The reusable GitHub Action
+│   ├── action.yml                       Composite action manifest
+│   ├── src/                             JS modules (Node 20, ESM, no build)
+│   │   ├── index.js                     10-phase orchestrator
+│   │   ├── diff.js                      PR file list (@actions/github)
+│   │   ├── surface.js                   file → route / api / component /
+│   │   │                                route-child / root-child
+│   │   ├── generate.js                  OpenAI gpt-5 → regression workflows,
+│   │   │                                grounded in the actual diff patches
+│   │   ├── lark.js                      getlark CLI for create / invoke
+│   │   │                                --wait / executions get / repairs /
+│   │   │                                archive; tolerant of JSON and human
+│   │   │                                output, accepts exit codes [0, 1]
+│   │   ├── comment.js                   single upsertable PR comment with
+│   │   │                                per-step checklist + artifact links
+│   │   ├── linear.js                    issueCreate GraphQL on real failures
+│   │   └── smoke.js                     offline smoke test (6 assertions)
 │   └── README.md
-├── demo-app/                      Next.js 15 storefront
+├── demo-app/                            Quant Console (Next.js 15)
+│   ├── DESIGN.md                        Binance-derived design system spec
 │   ├── app/
-│   │   ├── page.tsx               /
-│   │   ├── products/page.tsx      /products
-│   │   ├── checkout/page.tsx      /checkout (server) + Suspense
-│   │   ├── checkout/CheckoutForm.tsx   (client component)
-│   │   └── api/checkout/route.ts  /api/checkout (POST)
+│   │   ├── globals.css                  Design tokens as CSS variables
+│   │   ├── layout.tsx                   Root layout, top nav, footer
+│   │   ├── page.tsx                     Dashboard Suspense wrapper
+│   │   ├── Dashboard.tsx                Agents dashboard (KPIs + table)
+│   │   ├── agents/new/page.tsx          Deploy form page
+│   │   ├── agents/new/AgentForm.tsx     Deploy form (client)
+│   │   └── api/agents/route.ts          GET (list) + POST (create)
+│   ├── lib/
+│   │   └── agents.ts                    Seed data + types + formatters
 │   └── README.md
 ├── .github/workflows/
-│   └── sentinel.yml               vercel build → vercel deploy → Sentinel
-└── README.md                      You are here
+│   └── sentinel.yml                     vercel pull → build → deploy →
+│                                        Sentinel
+├── DEVPOST.md                           Hackathon submission write-up
+└── README.md                            You are here
 ```
 
 ## Setup checklist
@@ -126,15 +186,33 @@ npm run smoke
 
 ## Built with
 
-- **Lark CLI** — `@getlark/cli` for workflow `create` / `invoke --wait` / `repairs trigger` / `archive`.
-- **Lark REST API** — `api.getlark.ai` for execution + presigned artifact URLs (videos, screenshots, repro scripts).
-- **OpenAI gpt-4o** — generates regression workflow descriptions in JSON mode. Override via `SENTINEL_OPENAI_MODEL` env.
-- **Vercel CLI** — `vercel pull` → `vercel build` → `vercel deploy --prebuilt` for the per-PR preview deploy.
+- **Lark CLI** — `@getlark/cli` for workflow `create` / `invoke --wait` /
+  `executions get` / `repairs trigger` / `archive`.
+- **Lark REST artifacts** — presigned S3 URLs for video, screenshot,
+  and repro-script downloads.
+- **OpenAI gpt-5** — generates regression workflow descriptions in JSON
+  mode. Override via `SENTINEL_OPENAI_MODEL`.
+- **Vercel CLI** — `vercel pull` → `vercel build` → `vercel deploy
+  --prebuilt` for the per-PR preview deploy.
 - **Linear GraphQL** — `issueCreate` mutation for the failure-ticket loop.
 - **GitHub Actions** — composite action that runs in any repo.
+
+## What's next
+
+- **Persistent artifact storage.** Today, Lark's video/screenshot/repro
+  links expire ~1 hour after fetch; the PR comment goes stale. Pull
+  artifacts to GitHub release assets so they persist for the lifetime
+  of the repo.
+- **`workflow_dispatch` refresh button** so anyone (judge, reviewer) can
+  re-run the comment refresh on demand without a new commit.
+- **Switch generated workflows to deterministic mode** after first run so
+  Lark's repair-on-flake path can actually fire (currently no-op for
+  ai_driven workflows).
+- **GitHub App distribution** so the action installs in one click.
 
 ## Hackathon entry
 
 **Track:** Lark — Best Use of Lark CLI and/or MCP
 **Built by:** [@minjaeso](https://github.com/minjaeso)
 **Repo:** [minjaeso/lark-sentinel](https://github.com/minjaeso/lark-sentinel)
+**Submission write-up:** [DEVPOST.md](./DEVPOST.md)
