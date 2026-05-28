@@ -4,22 +4,31 @@ import OpenAI from 'openai';
 // Set SENTINEL_OPENAI_MODEL to override (e.g. gpt-5, gpt-4o-mini for cheaper runs).
 const MODEL = process.env.SENTINEL_OPENAI_MODEL || 'gpt-4o';
 
-const SYSTEM = `You generate end-to-end test workflow descriptions for the Lark testing platform.
+const SYSTEM = `You generate end-to-end REGRESSION test workflows for the Lark testing platform.
 Lark workflows are written in plain English and executed by an AI browser agent.
 
-CRITICAL: Ground every test in what the diff ACTUALLY shows. Do not invent UI affordances
-(e.g., "click the product name to open a details page") unless you can SEE them in the diff
-patch. If the diff shows a "Buy" button, the test clicks "Buy" — not the product name.
-If the patch is small and the surrounding code isn't shown, stick to behaviors you can
-infer from filenames and the snippet you do see.
+YOUR JOB IS REGRESSION DETECTION. The PR author may have introduced a regression they
+didn't notice. Do NOT trust the diff or the PR title to define what's "correct" — test
+what the END USER expects to happen.
 
 Each workflow must:
-- Verify ONE concrete user-facing behavior that the diff actually changes or surrounds.
-- Start from the provided base URL.
-- Be self-contained: include the URL to visit, the literal selectors/labels visible in the
-  patch, the steps to take, and a clear pass criterion.
-- Prefer regression tests (the existing flow still works) over assertions about brand-new
-  text or numbers that might be cosmetic.
+- Walk the end user's happy path for the touched surface, all the way to the visible
+  outcome the user expects (a confirmation message, a page rendering, an item in a cart,
+  an order placed, etc.). Then explicitly assert that visible outcome.
+- NEVER assert implementation details shown in the diff (request payload contents,
+  internal headers, code shapes). Those will pass even when the user flow is broken.
+- For a touched form: "fill in valid inputs, click submit, expect the success message"
+  — NOT "verify the request body contains field X."
+- For a touched list / display: "load the page, expect items to render"
+  — NOT "verify each item's HTML attributes match the diff."
+- For a touched API route: exercise the calling UI path; the test passes only if the
+  user-visible result is correct.
+
+The diff patches are CONTEXT for which user flow to test. They are NOT the specification
+of what passes. The diff might be the bug.
+
+Use the literal labels, selectors, and data-testids visible in the patches. Do not
+invent UI affordances that aren't shown.
 
 Return ONLY valid JSON of the shape:
 {"workflows":[{"name":"<short-kebab-case>","description":"<plain English test, 2-6 sentences>"}]}
@@ -65,13 +74,17 @@ ${surfaceLines}
 Diff patches (use these as the source of truth for what the page actually contains):
 ${patches || '(no patch content available)'}
 
-Generate up to ${maxWorkflows} workflow descriptions that, together, verify the changed surface end-to-end.
+Generate up to ${maxWorkflows} REGRESSION workflows that walk the end-user happy path
+through the touched surface and assert the user-visible outcome.
 - One workflow per distinct user journey. Do not over-test a single surface item.
-- If a route is touched, write "Visit ${previewUrl}<route>, then ..." (use the actual route).
-- If an API route is touched, exercise it via the UI that calls it; only fall back to a direct
-  fetch() if no UI path exists.
-- If a layout or shared component is touched, pick one representative page to test it through.
-- Use ONLY selectors, labels, and behaviors visible in the diff patches above. Don't assume
+- If a route is touched, write "Visit ${previewUrl}<route>, then walk through the flow
+  the user would take, then assert the user-visible outcome." Use the actual route.
+- If an API route is touched, exercise the calling UI flow end-to-end. Do not call the
+  API directly.
+- If a layout or shared component is touched, pick one representative page.
+- DO NOT write tests that just verify the diff itself (e.g. "the POST body contains X",
+  "the new product is listed"). Test that the user flow still works.
+- Use ONLY selectors, labels, and behaviors visible in the diff patches. Don't assume
   features (detail pages, modals, dropdowns) that aren't shown.
 - Keep names short (3-5 words, kebab-case). Keep descriptions tight and unambiguous.`;
 }
