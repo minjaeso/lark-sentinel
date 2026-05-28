@@ -4,6 +4,7 @@ const PRODUCTS = [
   { id: 'sku-1', name: 'Lark Hat', price: 29 },
   { id: 'sku-2', name: 'Lark Mug', price: 14 },
   { id: 'sku-3', name: 'Lark Sticker', price: 4 },
+  { id: 'sku-4', name: 'Lark Tote', price: 19 },
 ];
 
 export default function ProductsPage() {

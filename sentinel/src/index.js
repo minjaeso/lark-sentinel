@@ -73,6 +73,7 @@ async function run() {
   core.startGroup('3/6 Generating Lark workflow descriptions');
   const descriptions = await generateWorkflowDescriptions({
     surface,
+    files,
     previewUrl,
     maxWorkflows,
     prTitle: pr.title,
@@ -123,13 +124,17 @@ async function run() {
     const workflow = workflows.find((w) => w.id === inv.workflowId);
     let repaired = false;
     if (execution.status === 'failure' && repairOnFlake) {
-      core.info(`  ${inv.workflowId} failed; triggering repair...`);
+      core.info(`  ${inv.workflowId} failed; trying repair...`);
       try {
-        await triggerRepairAndWait(inv.workflowId);
-        const reInv = await invokeWorkflowsAndWait([inv.workflowId]);
-        execution = await getExecution(reInv[0].workflowId, reInv[0].executionId);
-        repaired = true;
-        core.info(`  ${inv.workflowId} re-ran after repair: ${execution.status}`);
+        const repairResult = await triggerRepairAndWait(inv.workflowId);
+        if (repairResult && repairResult.skipped) {
+          core.info(`  ${inv.workflowId} repair skipped: ${repairResult.reason}`);
+        } else {
+          const reInv = await invokeWorkflowsAndWait([inv.workflowId]);
+          execution = await getExecution(reInv[0].workflowId, reInv[0].executionId);
+          repaired = true;
+          core.info(`  ${inv.workflowId} re-ran after repair: ${execution.status}`);
+        }
       } catch (err) {
         core.warning(`  repair failed for ${inv.workflowId}: ${err.message}`);
       }

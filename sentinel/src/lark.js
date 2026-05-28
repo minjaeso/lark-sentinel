@@ -4,7 +4,7 @@
 
 import { spawn } from 'node:child_process';
 
-function sh(cmd, args) {
+function sh(cmd, args, { allowedExitCodes = [0] } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
@@ -13,11 +13,11 @@ function sh(cmd, args) {
     child.stderr.on('data', (d) => (stderr += d));
     child.on('error', reject);
     child.on('close', (code) => {
-      if (code !== 0) {
+      if (!allowedExitCodes.includes(code)) {
         reject(new Error(`${cmd} ${args.join(' ')} exited ${code}\nstderr: ${stderr}\nstdout: ${stdout}`));
         return;
       }
-      resolve({ stdout, stderr });
+      resolve({ stdout, stderr, code });
     });
   });
 }
@@ -59,6 +59,18 @@ export async function archiveWorkflow(workflowId) {
 }
 
 // Invoke and block until all reach a terminal status. Returns [{workflowId, executionId, status}].
+// NOTE: `getlark workflows invoke --wait` exits non-zero when any workflow fails, and prints
+// human-readable progress to stderr (not JSON). We accept exit code 1 and parse stderr.
+// Lark prints "executed with failure." OR "executed successfully." — same pattern, different adverb.
+const INVOKE_LINE = /Workflow (wflw_[A-Za-z0-9]+) executed (?:with )?(\w+)\. Execution ID: (wflw_exec_[A-Za-z0-9]+)/g;
+
+function normalizeStatus(raw) {
+  const s = raw.toLowerCase();
+  if (s === 'successfully' || s === 'success') return 'success';
+  if (s === 'failed' || s === 'failure') return 'failure';
+  return s;
+}
+
 export async function invokeWorkflowsAndWait(workflowIds, { timeoutSec = 600 } = {}) {
   const args = [
     'workflows', 'invoke',
@@ -66,19 +78,38 @@ export async function invokeWorkflowsAndWait(workflowIds, { timeoutSec = 600 } =
     '--wait',
     '--timeout', String(timeoutSec),
   ];
-  const { stdout } = await sh('getlark', args);
-  const json = parseJson(stdout, 'workflows invoke');
-  const list = Array.isArray(json)
-    ? json
-    : json.executions || json.invocations || json.results || [];
-  if (!Array.isArray(list) || list.length === 0) {
-    throw new Error(`workflows invoke returned no executions. Raw:\n${stdout.slice(0, 500)}`);
+  const { stdout, stderr } = await sh('getlark', args, { allowedExitCodes: [0, 1] });
+  const haystack = `${stderr}\n${stdout}`;
+
+  // Try JSON shape first (in case the CLI gains JSON output later).
+  const trimmed = stdout.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      const json = JSON.parse(trimmed);
+      const list = Array.isArray(json) ? json : json.executions || json.invocations || json.results || [];
+      if (Array.isArray(list) && list.length > 0) {
+        return list.map((e) => ({
+          workflowId: e.workflow_id || e.workflowId || e.workflow?.id,
+          executionId: e.id || e.execution_id || e.executionId,
+          status: e.status || e.result_type,
+        }));
+      }
+    } catch {}
   }
-  return list.map((e) => ({
-    workflowId: e.workflow_id || e.workflowId || e.workflow?.id,
-    executionId: e.id || e.execution_id || e.executionId,
-    status: e.status || e.result_type,
-  }));
+
+  // Parse human format on stderr.
+  const results = [];
+  let m;
+  INVOKE_LINE.lastIndex = 0;
+  while ((m = INVOKE_LINE.exec(haystack)) !== null) {
+    results.push({ workflowId: m[1], status: normalizeStatus(m[2]), executionId: m[3] });
+  }
+  if (results.length === 0) {
+    throw new Error(
+      `Could not extract executions from getlark output.\nstderr:\n${stderr.slice(0, 800)}\nstdout:\n${stdout.slice(0, 400)}`
+    );
+  }
+  return results;
 }
 
 export async function getExecution(workflowId, executionId) {
@@ -104,9 +135,13 @@ export async function getExecution(workflowId, executionId) {
 }
 
 // Trigger a repair and poll the workflow record until `last_repair_stopped_at`
-// transitions. Throws on timeout. Returns the final repair result_type.
+// transitions. Throws on timeout. Returns the final repair result_type, or
+// {skipped:true, reason} when repair doesn't apply to this workflow's mode.
 export async function triggerRepairAndWait(workflowId, { timeoutSec = 600, pollMs = 5000 } = {}) {
   const before = await getWorkflow(workflowId);
+  if (before.mode && before.mode !== 'deterministic') {
+    return { skipped: true, reason: `repair not applicable for ${before.mode} workflows` };
+  }
   const baselineStoppedAt = before.last_repair_stopped_at || null;
 
   await sh('getlark', ['workflows', 'repairs', 'trigger', workflowId]);
