@@ -1,8 +1,8 @@
 import OpenAI from 'openai';
 
-// Default to gpt-4o (broad availability + native JSON mode).
-// Set SENTINEL_OPENAI_MODEL to override (e.g. gpt-5, gpt-4o-mini for cheaper runs).
-const MODEL = process.env.SENTINEL_OPENAI_MODEL || 'gpt-4o';
+// Default to gpt-5 — the latest model as of the hackathon (May 2026).
+// Override via SENTINEL_OPENAI_MODEL (e.g. gpt-5-mini for cheaper runs, gpt-4o for fallback).
+const MODEL = process.env.SENTINEL_OPENAI_MODEL || 'gpt-5';
 
 const SYSTEM = `You generate end-to-end REGRESSION test workflows for the Lark testing platform.
 Lark workflows are written in plain English and executed by an AI browser agent.

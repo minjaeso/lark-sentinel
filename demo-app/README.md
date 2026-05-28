@@ -1,19 +1,31 @@
-# Sentinel Demo Storefront
+# Quant Console — demo app for Lark Sentinel
 
-A minimal Next.js (App Router) storefront used to demonstrate **Lark Sentinel**.
+A Binance-styled Next.js storefront for an AI trading-agent control plane.
+Used by Lark Sentinel as the system-under-test on every PR.
 
-## Routes
+## What's inside
 
-- `/` — home
-- `/products` — list with "Buy" buttons
-- `/checkout` — form: email + place order
-- `/api/checkout` — POST endpoint that creates an order
+- `/` — agents dashboard (seeded list + KPI cards)
+- `/agents/new` — deploy-an-agent form (name, strategy, risk, initial capital)
+- `/api/agents` — `GET` returns the seeded list, `POST` validates and returns a new agent
 
-## Demo bug toggle
+State is intentionally **non-persistent** so the demo works on serverless
+Vercel functions: the `POST` returns the created agent in its response body,
+the client encodes it into a `?created=<json>` query param on the redirect to
+`/`, and the dashboard prepends it to the seed list.
 
-The `/api/checkout` route checks `SENTINEL_DEMO_BUG=1`. When set, the endpoint
-returns HTTP 500 with `"Payment provider unavailable"`. This is the bug the
-generated Sentinel workflow is designed to catch.
+## Design system
+
+See [DESIGN.md](./DESIGN.md). Tokens are mirrored as CSS variables in
+[`app/globals.css`](./app/globals.css):
+
+- `--canvas` `#0b0e11` page floor
+- `--surface-card` `#1e2329` cards
+- `--primary` `#FCD535` Binance Yellow (single brand accent)
+- `--trading-up` `#0ecb81`, `--trading-down` `#f6465d`
+- Inter (BinanceNova substitute) for type, JetBrains Mono (BinancePlex
+  substitute) for every number — apply the `.num` class to any element
+  rendering a price, AUM, or PnL.
 
 ## Local
 
@@ -23,9 +35,20 @@ npm run dev
 # open http://localhost:3000
 ```
 
-## Demo recipe
+## Test IDs (for Lark workflows)
 
-1. Deploy this app to Vercel (or run `npm run dev` and tunnel via ngrok).
-2. Open a PR that touches `app/checkout/page.tsx` or `app/api/checkout/route.ts`.
-3. In the PR, set `SENTINEL_DEMO_BUG=1` in the preview environment.
-4. Sentinel runs on the PR, generates a checkout workflow, fails it, posts video.
+| Element | data-testid |
+|---|---|
+| New-agent CTA in top nav | `nav-new-agent` |
+| New-agent CTA in dashboard header | `deploy-agent` |
+| Dashboard banner after redirect | `created-banner` |
+| Each agent table row | `agent-row-<id>` |
+| Agent name cell | `agent-name` |
+| Agent today PnL cell | `agent-pnl-today` |
+| Form: name input | `agent-name-input` |
+| Form: strategy select | `agent-strategy-input` |
+| Form: risk select | `agent-risk-input` |
+| Form: capital input | `agent-capital-input` |
+| Form: cancel | `agent-form-cancel` |
+| Form: submit | `agent-form-submit` |
+| Form: error banner | `agent-form-error` |
