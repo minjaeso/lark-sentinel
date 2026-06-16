@@ -36,6 +36,15 @@ console.log('1b. surface mapper — app router child file (helper component)');
   assert.ok(labels.includes('route:/checkout'), 'expected /checkout from app/checkout/CheckoutForm.tsx');
 }
 
+console.log('1c. surface mapper — helper directly under app/');
+{
+  const files = [{ filename: 'app/Dashboard.tsx', status: 'modified' }];
+  const out = mapToSurface(files);
+  const labels = out.map((o) => `${o.kind}:${o.label}`);
+  console.log('   ->', labels.join(', '));
+  assert.ok(labels.includes('route:/'), 'expected / from app/Dashboard.tsx');
+}
+
 console.log('2. surface mapper — Next.js pages router');
 {
   const files = [
